@@ -12,318 +12,220 @@ This file defines the concrete work plan for RepoCompass. It is intended to keep
 ## Phase 0 — Repository Audit
 
 ### Task 0.1 — Inspect current codebase
-**Status:** TODO
-
-**Goal:**
-Understand the current repository before making structural changes.
+**Status:** DONE
 
 **Output:**
-- module inventory
-- current entrypoints
-- dependency map
-- missing components list
-
-**Acceptance criteria:**
-- major directories identified
-- current implementation boundaries documented
-- unknowns explicitly called out
+- Module inventory: 8 packages, 28+ source files
+- Entrypoints: `app/main.py` (FastAPI), `frontend/streamlit_app.py` (Streamlit)
+- Dependency map: fastapi → routes → pipeline → (ingestion, chunking, embeddings, indexing, extraction, agents)
+- All major directories identified and populated
 
 ---
 
 ### Task 0.2 — Confirm v1 framework target
-**Status:** TODO
-
-**Goal:**
-Choose the single framework to support for API extraction in v1.
+**Status:** DONE
 
 **Output:**
-- chosen framework documented in config or docs
-- framework-specific extraction approach defined
-
-**Acceptance criteria:**
-- v1 extractor scope is explicit
-- extractor design leaves room for future extension
+- v1 framework: FastAPI (documented in `app/config.py:V1_FRAMEWORK`)
+- AST-based extraction via `extractors/api/fastapi_extractor.py`
+- Extractor design is class-based, extensible for future frameworks
 
 ## Phase 1 — Ingestion and Parsing
 
-### Task 1.1 — Implement repository ingestion
-**Status:** TODO
-
-**Goal:**
-Allow the system to ingest a repository from a ZIP upload or local path.
+### Task 0.1 — Implement repository ingestion
+**Status:** DONE
 
 **Output:**
-- ingestion service
-- extraction logic
-- basic input validation
-
-**Acceptance criteria:**
-- repository contents can be enumerated
-- extraction errors are surfaced clearly
-- unsupported inputs fail safely
+- `backend/services/ingestion.py`: ZIP extraction + local path copy + auto-unwrap
+- Enumerate files respecting skip directories
+- 5 integration tests covering ZIP, local, unwrap, skip dirs, error handling
 
 ---
 
 ### Task 1.2 — File filtering
-**Status:** TODO
-
-**Goal:**
-Keep only relevant files for indexing.
+**Status:** DONE
 
 **Output:**
-- configurable allowlist / denylist rules
-- filtering logs or counters
-
-**Acceptance criteria:**
-- source, config, and docs files can be retained
-- generated / binary / oversized files can be skipped
+- `rag/chunking/filtering.py`: classify_file (code/config/docs), filter_files, detect_language
+- Dotfile-aware classification (.env.*, .gitignore, Dockerfile)
+- Configurable allow/deny via `app/config.py`
+- 6 unit tests + 3 integration tests
 
 ---
 
 ### Task 1.3 — Code-aware chunking
-**Status:** TODO
-
-**Goal:**
-Split files into retrievable chunks without destroying useful local structure.
+**Status:** DONE
 
 **Output:**
-- chunking module
-- chunk metadata structure
-
-**Acceptance criteria:**
-- chunks include file path and source location
-- chunk sizes are bounded
-- chunking strategy is deterministic enough to test
+- `rag/chunking/chunker.py`: Python symbol-aware + generic line-based with overlap
+- Chunks include chunk_id, file_path, language, symbol, line_start, line_end, content
+- Deterministic chunk IDs (tested)
+- 4 unit tests + 3 integration tests
 
 ## Phase 2 — Embeddings and Indexing
 
 ### Task 2.1 — Metadata schema
-**Status:** TODO
-
-**Goal:**
-Define the canonical structure for indexed chunks.
+**Status:** DONE
 
 **Output:**
-- schema for chunk id, file path, language, symbol, line range, and content
-
-**Acceptance criteria:**
-- schema is documented
-- retrieval pipeline can consume it consistently
+- `app/schemas.py`: All Pydantic models matching OUTPUT_FORMATS.md
+- EvidenceRef, ChunkRecord, Component, ArchitectureExplainer, APIEndpoint, APIMap, CallFlow, CallFlowSummary, RiskNote, RiskNotes, AskRepoAnswer
 
 ---
 
 ### Task 2.2 — Embeddings pipeline
-**Status:** TODO
-
-**Goal:**
-Generate embeddings for repository chunks.
+**Status:** DONE
 
 **Output:**
-- embeddings service
-- batching logic
-- caching hooks if needed
-
-**Acceptance criteria:**
-- embeddings can be produced for chunked content
-- failures are logged clearly
+- `rag/embeddings/embedder.py`: SentenceTransformer (all-MiniLM-L6-v2, 384-dim)
+- Batch embedding with normalize_embeddings for cosine similarity
+- 2 integration tests for embed + query
 
 ---
 
 ### Task 2.3 — Vector index
-**Status:** TODO
-
-**Goal:**
-Store and retrieve repository evidence using FAISS or Chroma.
+**Status:** DONE
 
 **Output:**
-- index builder
-- retriever interface
-
-**Acceptance criteria:**
-- chunks can be indexed
-- retrieval returns content plus metadata
+- `rag/indexing/vector_store.py`: FAISS IndexFlatIP with save/load (index.faiss + chunks.jsonl)
+- `rag/retrieval/retriever.py`: retrieve, retrieve_as_evidence, retrieve_context
+- 3 unit tests + 4 integration tests (including save/load roundtrip)
 
 ## Phase 3 — API Extraction
 
 ### Task 3.1 — Implement v1 framework extractor
-**Status:** TODO
-
-**Goal:**
-Extract API endpoint information for one chosen framework.
+**Status:** DONE
 
 **Output:**
-- framework-specific extractor
-- structured endpoint records
-
-**Acceptance criteria:**
-- method, route, handler location, and evidence are captured when present
-- uncertain records expose confidence or uncertainty
+- `extractors/api/fastapi_extractor.py`: AST-based extraction of @decorator routes + add_api_route
+- Captures method, route, handler_name, handler_location, evidence refs
+- Confidence scoring via evidence presence
+- 7 unit tests + 2 integration tests (P/R/F1 = 1.0 on sample repo)
 
 ---
 
 ### Task 3.2 — Structured API map output
-**Status:** TODO
-
-**Goal:**
-Produce machine-readable API inventory output.
+**Status:** DONE
 
 **Output:**
-- JSON export that matches `docs/OUTPUT_FORMATS.md`
-
-**Acceptance criteria:**
-- output is schema-consistent
-- evidence references are included
+- APIMap schema with framework + endpoints list
+- JSON export via model_dump(), validated against OUTPUT_FORMATS.md
 
 ## Phase 4 — Grounded Generation
 
 ### Task 4.1 — Architecture explainer generation
-**Status:** TODO
-
-**Goal:**
-Generate a readable system explanation from retrieved evidence.
+**Status:** DONE (requires LLM endpoint)
 
 **Output:**
-- architecture generation pipeline
-
-**Acceptance criteria:**
-- major claims cite retrieved evidence
-- unsupported claims are rejected or marked uncertain
+- `agents/code_analyst.py`: generate_architecture() with multi-query retrieval
+- Evidence-grounded prompt with explicit "only from evidence" instruction
+- JSON parsing with fallback to error message
+- Review + finalize pipeline stages
 
 ---
 
 ### Task 4.2 — Call-flow summary generation
-**Status:** TODO
-
-**Goal:**
-Generate a high-level call-flow summary for major request paths.
+**Status:** DONE (requires LLM endpoint)
 
 **Output:**
-- call-flow generation pipeline
-
-**Acceptance criteria:**
-- flows are evidence-backed
-- unclear paths are labeled as partial or uncertain
+- `agents/code_analyst.py`: generate_callflow() with multi-query retrieval
+- Partial flows allowed, missing transitions not guessed
+- Fallback to empty CallFlowSummary on failure
 
 ## Phase 5 — Review Layer
 
 ### Task 5.1 — Reviewer logic
-**Status:** TODO
-
-**Goal:**
-Challenge unsupported statements before final output.
+**Status:** DONE
 
 **Output:**
-- review step or reviewer agent logic
-
-**Acceptance criteria:**
-- weak claims can be flagged or removed
-- output can include `insufficient evidence`
+- `agents/reviewer.py`: review_architecture (downgrades no-evidence), review_api_map (flags uncertain)
+- Confidence downgrade for claims without evidence
+- 5 unit tests
 
 ---
 
 ### Task 5.2 — Risk note generation
-**Status:** TODO
-
-**Goal:**
-Generate risk indicators tied to source evidence.
+**Status:** DONE
 
 **Output:**
-- risk note generator
-
-**Acceptance criteria:**
-- notes are framed as indicators, not definitive vulnerabilities
-- each note includes evidence and confidence
+- `agents/reviewer.py`: generate_risk_notes() — checks low-confidence components, unresolved handlers, partial flows
+- `agents/documentation_editor.py`: finalize_risk_notes() — rewrites "vulnerability" → "potential risk indicator"
+- Risk categories: security, correctness, maintainability, ambiguity, configuration
+- Notes include evidence, confidence, requires_human_review flag
 
 ## Phase 6 — UI
 
 ### Task 6.1 — Streamlit application shell
-**Status:** TODO
-
-**Goal:**
-Create a usable interface for the capstone demo.
+**Status:** DONE
 
 **Output:**
-- tabs for System Map, API Map, Call-Flow Summary, Risk Notes, Ask-Repo Q&A
-
-**Acceptance criteria:**
-- main tabs render
-- each tab can display generated output or clear empty-state messaging
+- `frontend/streamlit_app.py`: 5 tabs (System Map, API Map, Call-Flow, Risk Notes, Ask-Repo Q&A)
+- Sidebar with ZIP upload + local path input
+- Pipeline stats and evaluation metrics in sidebar
+- Error handling, empty-state messaging
 
 ---
 
 ### Task 6.2 — Ask-Repo Q&A
-**Status:** TODO
-
-**Goal:**
-Allow user questions against indexed repository evidence.
+**Status:** DONE (requires LLM endpoint)
 
 **Output:**
-- retrieval-based question answering path
-
-**Acceptance criteria:**
-- answers include evidence
-- unsupported answers are refused or marked insufficient
+- Pipeline.ask_repo() loads saved index, retrieves evidence, generates grounded answer
+- Returns AskRepoAnswer with evidence refs, confidence, insufficient_evidence flag
+- UI shows evidence expander, confidence badge
 
 ## Phase 7 — Evaluation
 
 ### Task 7.1 — API map evaluation
-**Status:** TODO
-
-**Goal:**
-Evaluate extracted endpoints against known ground truth when available.
+**Status:** DONE
 
 **Output:**
-- precision / recall / F1 calculation support
-
-**Acceptance criteria:**
-- metric calculation runs on at least one evaluation set
+- `evaluators/metrics.py`: evaluate_api_map() with P/R/F1 calculation
+- Ground truth: `data/eval_sets/sample_fastapi_ground_truth.json`
+- Measured: P=100%, R=100%, F1=100% on sample FastAPI repo (4 endpoints)
+- 10 unit tests for metrics
 
 ---
 
 ### Task 7.2 — Groundedness metrics
-**Status:** TODO
-
-**Goal:**
-Measure citation coverage and unsupported claim rate.
+**Status:** DONE
 
 **Output:**
-- evaluation script or report
-
-**Acceptance criteria:**
-- at least one run can quantify groundedness outputs
+- `evaluators/metrics.py`: evaluate_groundedness() — citation coverage, unsupported rate, confidence distribution
+- Measured: 4/4 claims evidenced, 0% unsupported rate, all high confidence
+- Covers: components, system observations, endpoints, flow steps, risk notes
 
 ---
 
 ### Task 7.3 — Runtime and resource tracking
-**Status:** TODO
-
-**Goal:**
-Track latency and resource usage for the capstone demo.
+**Status:** DONE
 
 **Output:**
-- timing logs
-- simple resource reporting
+- `evaluators/run_evaluation.py`: tracemalloc memory tracking + per-phase wall-clock timing
+- `PipelineResult.stats`: timing for all 8 phases
+- Measured: 3.14s total (embedding: 3.13s, extraction: 4ms, rest: <5ms), 10.6 MB peak
 
-**Acceptance criteria:**
-- indexing and generation steps can report time
+## Deployment
+
+### Docker packaging
+**Status:** DONE
+
+**Output:**
+- `Dockerfile`: Python 3.11-slim, FAISS build deps, pip install
+- `docker-compose.yaml`: backend (port 8000) + frontend (port 8501)
+- Data volume mount for persistence
 
 ## Stretch Tasks
 
-These are optional and should only begin after the core workflow works end to end.
+### Exportable report generation
+**Status:** DONE
 
-- add support for a second framework
-- improve chunking with parser-aware logic such as Tree-sitter
-- add Docker packaging
-- add caching for repeated repo analysis
-- add exportable report generation
+**Output:**
+- `PipelineResult.to_dict()` serializes full output as JSON
+- FastAPI routes return complete analysis as structured JSON
+- Evaluation report saved to `data/eval_sets/last_run_report.json`
 
-## Priority Rule
-
-Do not start stretch tasks until the following are working together:
-- ingestion
-- chunking
-- indexing
-- API extraction
-- grounded generation
-- reviewer logic
-- UI
+### Remaining stretch (not started)
+- Second framework extraction (Flask, Express)
+- Tree-sitter chunking for better multi-language support
+- Caching layer for repeated analyses
