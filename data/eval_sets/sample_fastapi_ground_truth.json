@@ -1,0 +1,13 @@
+{
+  "description": "Ground truth API endpoints for the sample FastAPI evaluation repo.",
+  "construction_method": "Manual annotation of the sample repo defined in tests/test_integration.py SAMPLE_REPO_FILES. Each endpoint was verified by reading the source code directly.",
+  "annotated_by": "automated (source-code verified)",
+  "date": "2026-04-19",
+  "framework": "fastapi",
+  "endpoints": [
+    {"method": "GET", "route": "/health", "handler": "health_check", "file": "app/main.py", "line": 7},
+    {"method": "GET", "route": "/items/{item_id}", "handler": "get_item", "file": "app/main.py", "line": 12},
+    {"method": "POST", "route": "/items", "handler": "create_item", "file": "app/main.py", "line": 17},
+    {"method": "DELETE", "route": "/items/{item_id}", "handler": "delete_item", "file": "app/main.py", "line": 22}
+  ]
+}

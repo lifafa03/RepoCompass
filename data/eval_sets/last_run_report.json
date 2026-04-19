@@ -1,0 +1,45 @@
+{
+  "api_metrics": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "true_positives": 4,
+    "false_positives": 0,
+    "false_negatives": 0,
+    "details": [
+      {"endpoint": "GET /health", "match": true, "confidence": "high", "has_evidence": true},
+      {"endpoint": "GET /items/{item_id}", "match": true, "confidence": "high", "has_evidence": true},
+      {"endpoint": "POST /items", "match": true, "confidence": "high", "has_evidence": true},
+      {"endpoint": "DELETE /items/{item_id}", "match": true, "confidence": "high", "has_evidence": true}
+    ]
+  },
+  "groundedness": {
+    "total_claims": 4,
+    "claims_with_evidence": 4,
+    "claims_without_evidence": 0,
+    "unsupported_rate": 0.0,
+    "avg_evidence_per_claim": 1.0,
+    "confidence_distribution": {"high": 4, "medium": 0, "low": 0},
+    "details": [
+      {"name": "GET /health", "has_evidence": true, "evidence_count": 1, "confidence": "high"},
+      {"name": "GET /items/{item_id}", "has_evidence": true, "evidence_count": 1, "confidence": "high"},
+      {"name": "POST /items", "has_evidence": true, "evidence_count": 1, "confidence": "high"},
+      {"name": "DELETE /items/{item_id}", "has_evidence": true, "evidence_count": 1, "confidence": "high"}
+    ]
+  },
+  "resources": {
+    "total_seconds": 3.41,
+    "phase_timings": {
+      "ingest_seconds": 0.001,
+      "filter_seconds": 0.0,
+      "chunk_seconds": 0.003,
+      "embed_seconds": 3.398,
+      "index_seconds": 0.0,
+      "extract_seconds": 0.005
+    },
+    "chunks_indexed": 12,
+    "endpoints_extracted": 4,
+    "risk_notes_count": 0,
+    "memory_peak_mb": null
+  }
+}
