@@ -9,15 +9,20 @@ def classify_file(path: Path) -> str | None:
     if path.suffix in config.SKIP_EXTENSIONS:
         return None
 
+    # Check for dotfiles and special names first
+    name_lower = path.name.lower()
+    if name_lower in ("dockerfile", "makefile", "rakefile", "gemfile", "procfile",
+                       ".env", ".env.example", ".env.local", ".gitignore"):
+        return "config"
+    if name_lower.startswith(".env."):
+        return "config"
+
     if path.suffix not in config.ALLOWED_EXTENSIONS:
-        name_lower = path.name.lower()
-        if name_lower in ("dockerfile", "makefile", "rakefile", "gemfile", "procfile"):
-            return "config"
         return None
 
     code_exts = {".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".rs", ".rb",
                  ".html", ".css", ".scss", ".sh", ".bash", ".zsh"}
-    config_exts = {".yaml", ".yml", ".json", ".toml", ".ini", ".cfg", ".env", ".env.example"}
+    config_exts = {".yaml", ".yml", ".json", ".toml", ".ini", ".cfg"}
     doc_exts = {".md", ".rst", ".txt"}
 
     if path.suffix in code_exts:
@@ -38,7 +43,6 @@ def filter_files(files: list[Path]) -> list[tuple[Path, str]]:
                 continue
         except OSError:
             continue
-
         ct = classify_file(f)
         if ct is not None:
             result.append((f, ct))
@@ -46,7 +50,6 @@ def filter_files(files: list[Path]) -> list[tuple[Path, str]]:
 
 
 def detect_language(path: Path) -> str | None:
-    """Guess language from file extension."""
     ext_map = {
         ".py": "python", ".js": "javascript", ".ts": "typescript",
         ".jsx": "jsx", ".tsx": "tsx", ".java": "java",
