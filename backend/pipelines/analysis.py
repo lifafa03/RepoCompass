@@ -29,11 +29,26 @@ class PipelineResult:
     callflow: CallFlowSummary = field(default_factory=CallFlowSummary)
     risk_notes: RiskNotes = field(default_factory=RiskNotes)
     stats: dict = field(default_factory=dict)
-    evaluation: dict | None = None
+    evaluation: dict | None = None  # Phase 9: Evaluation metrics
     chunks_count: int = 0
+
+    def to_dict(self) -> dict:
+        """Serialize to JSON-compatible dict."""
+        return {
+            "repo_id": self.repo_id,
+            "architecture": self.architecture.model_dump(),
+            "api_map": self.api_map.model_dump(),
+            "callflow": self.callflow.model_dump(),
+            "risk_notes": self.risk_notes.model_dump(),
+            "stats": self.stats,
+            "evaluation": self.evaluation,
+            "chunks_count": self.chunks_count,
+        }
 
 
 class RepoCompassPipeline:
+    """Orchestrates the full analysis pipeline."""
+
     def __init__(self):
         self.embedder = EmbeddingService()
         self._timings: dict[str, float] = {}
@@ -42,7 +57,10 @@ class RepoCompassPipeline:
         self._timings[label] = time.time()
 
     def run(self, source: Path, repo_id: str | None = None) -> PipelineResult:
+        """Run the full pipeline on a repository source (ZIP or directory)."""
         result = PipelineResult(repo_id=repo_id or "unknown")
+
+        # Phase 1: Ingestion
         self._time("ingest_start")
         if source.is_file() and source.suffix == ".zip":
             repo_root = ingest_zip(source, repo_id)
@@ -50,11 +68,13 @@ class RepoCompassPipeline:
             repo_root = ingest_local(source, repo_id)
         self._time("ingest_end")
 
+        # Phase 2: File filtering
         self._time("filter_start")
         all_files = enumerate_files(repo_root)
         filtered = filter_files(all_files)
         self._time("filter_end")
 
+        # Phase 3: Chunking
         self._time("chunk_start")
         chunks = chunk_repo(repo_root, filtered)
         self._time("chunk_end")
@@ -63,6 +83,7 @@ class RepoCompassPipeline:
             result.stats = self._compute_stats()
             return result
 
+        # Phase 4: Embeddings + Indexing
         self._time("embed_start")
         embeddings = self.embedder.embed_chunks(chunks)
         self._time("embed_end")
@@ -72,12 +93,15 @@ class RepoCompassPipeline:
         index.add(chunks, embeddings)
         self._time("index_end")
 
+        # Save index
         from app import config
         index_dir = config.VECTOR_STORE_DIR / result.repo_id
         index.save(index_dir)
 
+        # Phase 5: Retrieval setup
         retriever = Retriever(index, self.embedder)
 
+        # Phase 6: API extraction (static, no LLM needed)
         self._time("extract_start")
         source_files = [fp for fp, ct in filtered if ct == "code"]
         api_map = extract_api_map(repo_root, source_files)
@@ -85,6 +109,7 @@ class RepoCompassPipeline:
         result.api_map = api_map
         self._time("extract_end")
 
+        # Phase 7: Grounded generation
         self._time("gen_start")
         try:
             result.architecture = generate_architecture(retriever)
@@ -92,12 +117,15 @@ class RepoCompassPipeline:
             result.architecture = finalize_architecture(result.architecture)
         except Exception as e:
             result.architecture = ArchitectureExplainer(summary=f"Generation failed: {e}")
+
         try:
             result.callflow = generate_callflow(retriever)
         except Exception:
             result.callflow = CallFlowSummary()
+
         self._time("gen_end")
 
+        # Phase 8: Risk notes
         self._time("risk_start")
         result.risk_notes = generate_risk_notes(result.architecture, result.api_map, result.callflow)
         result.risk_notes = finalize_risk_notes(result.risk_notes)
@@ -106,22 +134,36 @@ class RepoCompassPipeline:
         result.chunks_count = len(chunks)
         result.stats = self._compute_stats()
 
+        # Phase 9: Evaluation
         from evaluators.metrics import run_full_evaluation
-        evaluation = run_full_evaluation(result.architecture, result.api_map, result.callflow, result.risk_notes, result.stats, chunks_count=len(chunks))
+        evaluation = run_full_evaluation(
+            result.architecture, result.api_map, result.callflow,
+            result.risk_notes, result.stats, chunks_count=len(chunks),
+        )
         result.evaluation = evaluation.to_dict()
 
         return result
 
     def ask_repo(self, repo_id: str, question: str) -> AskRepoAnswer:
+        """Answer a question about an indexed repository."""
         from app import config
         from agents.documentation_editor import format_answer
+        import json
+
         index_dir = config.VECTOR_STORE_DIR / repo_id
         if not index_dir.exists():
-            return AskRepoAnswer(question=question, answer="insufficient evidence", evidence=[], confidence="low", insufficient_evidence=True, uncertainty_note="Repository not indexed.")
+            return AskRepoAnswer(
+                question=question, answer="insufficient evidence",
+                evidence=[], confidence="low", insufficient_evidence=True,
+                uncertainty_note="Repository not indexed.",
+            )
+
         index = VectorIndex.load(index_dir)
         retriever = Retriever(index, self.embedder)
+
         context = retriever.retrieve_context(question, top_k=8)
         refs = retriever.retrieve_as_evidence(question, top_k=8)
+
         prompt = f"""Answer the following question about a repository using ONLY the evidence provided.
 
 QUESTION: {question}
@@ -131,13 +173,26 @@ EVIDENCE:
 
 If you cannot answer from the evidence, respond with exactly: insufficient evidence
 Otherwise, provide a concise answer and reference specific files/lines."""
+
         try:
             response = generate(prompt)
             if "insufficient evidence" in response.lower():
-                return AskRepoAnswer(question=question, answer="insufficient evidence", evidence=[], confidence="low", insufficient_evidence=True, uncertainty_note="Evidence was not sufficient to answer reliably.")
-            return AskRepoAnswer(question=question, answer=response.strip(), evidence=refs[:5], confidence="medium", insufficient_evidence=False)
+                return AskRepoAnswer(
+                    question=question, answer="insufficient evidence",
+                    evidence=[], confidence="low", insufficient_evidence=True,
+                    uncertainty_note="Evidence was not sufficient to answer reliably.",
+                )
+            return AskRepoAnswer(
+                question=question, answer=response.strip(),
+                evidence=refs[:5], confidence="medium",
+                insufficient_evidence=False,
+            )
         except Exception as e:
-            return AskRepoAnswer(question=question, answer=f"Error: {e}", evidence=[], confidence="low", insufficient_evidence=True, uncertainty_note=str(e))
+            return AskRepoAnswer(
+                question=question, answer=f"Error: {e}",
+                evidence=[], confidence="low", insufficient_evidence=True,
+                uncertainty_note=str(e),
+            )
 
     def _compute_stats(self) -> dict:
         timings = {}

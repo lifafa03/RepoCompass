@@ -14,7 +14,7 @@ _pipeline = RepoCompassPipeline()
 @router.post("/upload")
 async def upload_and_analyze(file: UploadFile = File(...)):
     """Upload a ZIP file and run full analysis."""
-    if not file.filename.endswith(".zip"):
+    if not file.filename or not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only ZIP files are accepted.")
 
     content = await file.read()
@@ -25,7 +25,7 @@ async def upload_and_analyze(file: UploadFile = File(...)):
     tmp.close()
 
     result = _pipeline.run(Path(tmp.name), repo_id)
-    return result
+    return result.to_dict()
 
 
 @router.post("/analyze-path")
@@ -36,11 +36,11 @@ async def analyze_path(path: str):
         raise HTTPException(status_code=404, detail=f"Path not found: {path}")
 
     result = _pipeline.run(p)
-    return result
+    return result.to_dict()
 
 
 @router.post("/ask")
 async def ask_repo(repo_id: str, question: str):
     """Ask a question about an indexed repository."""
     answer = _pipeline.ask_repo(repo_id, question)
-    return answer
+    return answer.model_dump()
