@@ -22,9 +22,11 @@ env/
 .env
 
 # Data
-data/uploads/
-data/vector_stores/
-data/eval_sets/*.json
+data/uploads/*
+!data/uploads/.gitkeep
+data/vector_stores/*
+!data/vector_stores/.gitkeep
+data/eval_sets/last_run_report.json
 
 # OS
 .DS_Store
