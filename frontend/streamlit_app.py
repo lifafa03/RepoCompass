@@ -40,9 +40,7 @@ if "repo_id" not in st.session_state:
 # Sidebar: Upload
 with st.sidebar:
     st.header("Repository Input")
-
     input_mode = st.radio("Input mode", ["Upload ZIP", "Local Path"])
-
     repo_source = None
     repo_id = None
 
@@ -68,7 +66,10 @@ with st.sidebar:
                 st.session_state.repo_id = st.session_state.result.repo_id
                 st.success("Analysis complete!")
             except Exception as e:
+                import traceback
                 st.error(f"Analysis failed: {e}")
+                with st.expander("Error details"):
+                    st.code(traceback.format_exc())
 
 # Main Tabs
 result = st.session_state.result
@@ -101,7 +102,7 @@ with tab_arch:
                     st.caption(f"Warning: {obs.uncertainty_note}")
         else:
             if not result.architecture.components:
-                st.info("No architecture components identified. (LLM generation may not be configured.)")
+                st.info("No architecture data generated. Configure LLM secrets for full results.")
     else:
         st.info("Upload a repository to see the architecture explainer.")
 
@@ -114,14 +115,18 @@ with tab_api:
             method_color = {"GET": "blue", "POST": "orange", "PUT": "purple", "DELETE": "red", "PATCH": "yellow"}.get(ep.method, "white")
             st.markdown(f"{conf_color} **{method_color} `{ep.method}`** `{ep.route}`")
             if ep.handler_name:
-                st.caption(f"Handler: `{ep.handler_name}`" + (f" at `{ep.handler_location.file_path}:{ep.handler_location.line_start}`" if ep.handler_location else ""))
+                loc = f" at `{ep.handler_location.file_path}:{ep.handler_location.line_start}`" if ep.handler_location else ""
+                st.caption(f"Handler: `{ep.handler_name}`{loc}")
             if ep.uncertainty_note:
                 st.caption(f"Warning: {ep.uncertainty_note}")
             with st.expander("Evidence"):
                 for ev in ep.evidence:
                     st.code(f"{ev.file_path}:{ev.line_start}-{ev.line_end}")
     else:
-        st.info("Upload a repository to see the API map.")
+        if result:
+            st.warning("No API endpoints found. Make sure your repo uses FastAPI with @app.route decorators.")
+        else:
+            st.info("Upload a repository to see the API map.")
 
 with tab_flow:
     st.header("Call-Flow Summary")
@@ -138,7 +143,7 @@ with tab_flow:
                     st.caption(f"Warning: {step.uncertainty_note}")
     else:
         if result:
-            st.info("No call flows identified. (LLM generation may not be configured.)")
+            st.info("No call flows identified. Configure LLM secrets for full results.")
         else:
             st.info("Upload a repository to see the call-flow summary.")
 
@@ -159,7 +164,7 @@ with tab_risk:
                     st.code(f"{ev.file_path}:{ev.line_start}-{ev.line_end}")
     else:
         if result:
-            st.success("No risk notes generated - all extracted items have high confidence.")
+            st.success("No risk notes - all extracted items have high confidence.")
         else:
             st.info("Upload a repository to see risk notes.")
 
